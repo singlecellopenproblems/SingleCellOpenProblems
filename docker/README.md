@@ -4,16 +4,16 @@ Note, all images must comply to the [AWS SageMaker Custom Image Specifications](
 
 **Table of Contents**
 - [Docker images](#docker-images)
-  * [Available images](#available-images)
-    + [openproblems](#openproblems)
-    + [openproblems-r-base](#openproblems-r-base)
-    + [openproblems-r-extras](#openproblems-r-extras)
-    + [openproblems-python-extras](#openproblems-python-extras)
-  * [Adding a package to the available images](#adding-a-package-to-the-available-images)
-  * [Adding new images](#adding-new-images)
-  * [Building Docker images locally](#building-docker-images-locally)
-  * [Building Docker images through GitHub Actions workflows](#building-docker-images-through-github-actions-workflows)
-  * [Pulling images from the ECR to your local machine](#pulling-images-from-the-ecr-to-your-local-machine)
+  - [Available images](#available-images)
+    - [openproblems](#openproblems)
+    - [openproblems-r-base](#openproblems-r-base)
+    - [openproblems-r-extras](#openproblems-r-extras)
+    - [openproblems-python-extras](#openproblems-python-extras)
+  - [Adding a package to the available images](#adding-a-package-to-the-available-images)
+  - [Adding new images](#adding-new-images)
+  - [Building Docker images locally](#building-docker-images-locally)
+  - [Building Docker images through GitHub Actions workflows](#building-docker-images-through-github-actions-workflows)
+  - [Pulling images from the ECR to your local machine](#pulling-images-from-the-ecr-to-your-local-machine)
 <!-- Table of contents generated with [markdown-toc](http://ecotrust-canada.github.io/markdown-toc/) -->
 
 **Additional resources**
@@ -110,7 +110,7 @@ If that workflow failed, you should look at the workflow logs to find the error.
 
 You can find your successfully uploaded images on the ECR. To navigate to the ECR, search the AWS console for "ECR" and click on "Repositories" and then click on `openproblems`. You should also see a `nextflow` repository that's used for your benchmarking backend, but you can ignore that for now.
 
-As you can see below, images uploaded to the ECR have Image Tags in the following format `openproblems:[first 6 characters of username]-[branch name]-[image name]`. For example, `danielStrobel` recently pushed his `batch-integration` branch containing a `openproblems-python37-scgen` image. This is converted to an Image Tag `daniel-batch-integration-openproblems-python37-scgen`.
+As you can see below, images uploaded to the ECR have Image Tags in the following format `openproblems:[first 6 characters of username]-[branch name]-[image name]`. For example, `danielStrobl` recently pushed his `batch-integration` branch containing a `openproblems-python37-scgen` image. This is converted to an Image Tag `daniel-batch-integration-openproblems-python37-scgen`.
 
 
 <img width="800" alt="Untitled" src="https://user-images.githubusercontent.com/8322751/112719414-43b14e80-8ecf-11eb-8fe2-5588e42c77c5.png">
