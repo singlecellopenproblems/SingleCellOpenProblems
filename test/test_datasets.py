@@ -1,19 +1,25 @@
-import utils
-
-import pandas as pd
 import anndata
-import parameterized
 import openproblems
-import unittest
-
+import pandas as pd
+import parameterized
+import pytest
 import scipy.sparse
+import unittest
+import utils
+import utils.asserts
+import utils.cache
+import utils.name
+import utils.warnings
 
 utils.warnings.ignore_warnings()
 
 
 def _assert_not_bytes(X):
     if isinstance(X, pd.Series):
-        assert not X.apply(lambda x: isinstance(x, bytes)).any()
+        if pd.api.types.is_categorical_dtype(X):
+            return _assert_not_bytes(X.dtype.categories)
+        else:
+            assert not X.apply(lambda x: isinstance(x, bytes)).any()
     elif isinstance(X, pd.Index):
         return _assert_not_bytes(X.to_series())
     elif isinstance(X, pd.DataFrame):
@@ -28,22 +34,44 @@ def _assert_not_bytes(X):
 
 
 @parameterized.parameterized_class(
-    ("dataset", "task", "test"),
+    ("dataset", "task", "test", "tempdir"),
     [
-        (staticmethod(dataset), task, test)
+        (staticmethod(dataset), task, test, utils.TEMPDIR.name)
         for task in openproblems.TASKS
         for dataset in task.DATASETS
-        for test in [True, False]
+        for test in [True]
     ],
     class_name_func=utils.name.name_test,
 )
 class TestDataset(unittest.TestCase):
-    """Test dataset loading."""
+    """Test cached dataset characteristics."""
 
     @classmethod
     def setUpClass(cls):
         """Load data."""
-        cls.adata = cls.dataset(test=cls.test)
+        try:
+            cls.adata = utils.cache.load(
+                cls.tempdir,
+                cls.task,
+                cls.dataset,
+                test=cls.test,
+                dependency="test_load_dataset",
+            )
+        except AssertionError as e:
+            if str(e) == "Intermediate file missing. Did test_load_dataset fail?":
+                pytest.skip("Dataset not loaded successfully")
+            else:
+                raise
+
+    @classmethod
+    def tearDownClass(cls):
+        """Remove data."""
+        utils.cache.delete(
+            cls.tempdir,
+            cls.task,
+            cls.dataset,
+            test=cls.test,
+        )
 
     def test_adata_class(self):
         """Ensure output is AnnData."""
@@ -54,8 +82,8 @@ class TestDataset(unittest.TestCase):
         assert self.adata.shape[0] > 0
         assert self.adata.shape[1] > 0
         if self.test:
-            assert self.adata.shape[0] < 600
-            assert self.adata.shape[1] < 1500
+            assert self.adata.shape[0] <= 600
+            assert self.adata.shape[1] <= 1500
 
     def test_sparse(self):
         """Ensure output is sparse."""
@@ -81,13 +109,7 @@ class TestDataset(unittest.TestCase):
 
     def test_task_checks(self):
         """Run task-specific tests."""
-        assert self.task.checks.check_dataset(self.adata)
-
-    def test_cache(self):
-        """Test that AnnData files are written to disk."""
-        adata = self.dataset(test=self.test)
-        assert adata.__from_cache__
-        assert adata.shape == self.adata.shape
+        assert self.task.api.check_dataset(self.adata)
 
     @parameterized.parameterized.expand(
         [

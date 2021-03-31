@@ -1,10 +1,10 @@
-import functools
-from memory_profiler import memory_usage
-import time
-import anndata
-import logging
-
 from . import utils
+
+import anndata
+import functools
+import logging
+import memory_profiler
+import time
 
 log = logging.getLogger("openproblems")
 
@@ -116,13 +116,15 @@ def metric(metric_name, maximize, image="openproblems"):
     return decorator
 
 
-def dataset(dataset_name):
+def dataset(dataset_name, image="openproblems"):
     """Decorate a dataset function.
 
     Parameters
     ----------
     dataset_name : str
         Unique human readable name of the dataset
+    image : str, optional (default: "openproblems")
+        Name of the Docker image to be used for this dataset
     """
 
     def decorator(func):
@@ -131,7 +133,7 @@ def dataset(dataset_name):
             log.debug("Loading {} dataset".format(func.__name__))
             return func(*args, **kwargs)
 
-        apply_func.metadata = dict(dataset_name=dataset_name)
+        apply_func.metadata = dict(dataset_name=dataset_name, image=image)
         return apply_func
 
     return decorator
@@ -154,7 +156,7 @@ def profile(func):
         def dummy():
             pass
 
-        base_memory = memory_usage(
+        base_memory = memory_profiler.memory_usage(
             (dummy, tuple(), dict()),
             interval=0.1,
             max_usage=True,
@@ -167,7 +169,7 @@ def profile(func):
             end_time = time.perf_counter()
             output["runtime_s"] = end_time - start_time
 
-        peak_memory = memory_usage(
+        peak_memory = memory_profiler.memory_usage(
             (apply_func, args, kwargs),
             multiprocess=True,
             include_children=True,
@@ -177,12 +179,12 @@ def profile(func):
         output["memory_mb"] = peak_memory - base_memory
         utils.garbage_collection()
 
-        post_memory = memory_usage(
+        post_memory = memory_profiler.memory_usage(
             (dummy, tuple(), dict()),
             interval=0.1,
             max_usage=True,
         )
-        output["memory_leaked_mb"] = post_memory - base_memory
+        output["memory_leaked_mb"] = max(0.0, post_memory - base_memory)
         return output
 
     return decorated

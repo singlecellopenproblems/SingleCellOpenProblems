@@ -2,16 +2,22 @@ name: Run Tests
 
 on:
   push:
-    branches:
-      - '*'
+    branches-ignore:
+      - 'test_docker'
+      - 'test_benchmark'
   pull_request:
-    branches:
-      - '*'
+    types: [opened, synchronize, reopened, ready_for_review]
 
 jobs:
-  run_tests:
+  run_tester:
     runs-on: ${{ matrix.config.os }}
-    if: "!contains(github.event.head_commit.message, 'ci skip')"
+    if: >-
+      !contains(github.event.head_commit.message, 'ci skip') &&
+      (
+        startsWith(github.ref, 'refs/heads') ||
+        github.event.pull_request.draft == false
+      )
+
     env:
       RENV_PATHS_ROOT: ~/.local/share/renv
 
@@ -19,11 +25,20 @@ jobs:
       fail-fast: false
       matrix:
         config:
-        - {name: 'current', os: ubuntu-latest, python: '3.8', r: 'release' }
-        - {name: 'prev', os: ubuntu-latest, python: '3.7', r: 'release' }
-        - {name: 'old', os: ubuntu-latest, python: '3.6', r: 'release' }
+        - {name: 'curr', os: ubuntu-18.04, python: '3.8', r: 'release' }
+        - {name: 'prev', os: ubuntu-18.04, python: '3.7', r: 'release' }
+        - {name: 'old', os: ubuntu-18.04, python: '3.6', r: 'release' }
 
     steps:
+    - name: Cancel Previous Runs
+      uses: styfle/cancel-workflow-action@0.6.0
+      with:
+        access_token: ${{ github.token }}
+
+    - name: Check Ubuntu version
+      run: |
+        echo "UBUNTU_VERSION=`grep DISTRIB_RELEASE /etc/lsb-release | sed 's/.*=//g'`" >> $GITHUB_ENV
+
     - uses: actions/checkout@v2
       with:
         fetch-depth: 0
@@ -31,13 +46,8 @@ jobs:
     - name: Install system dependencies
       if: runner.os == 'Linux'
       run: |
-        sudo apt-get update -qq
+        sudo apt-get update -qq || (sudo rm /etc/apt/sources.list.d/* && sudo apt-get update -yqq)
         sudo apt-get install -y libhdf5-dev pandoc gfortran libblas-dev liblapack-dev libedit-dev llvm-dev libcurl4-openssl-dev
-
-    - name: Install Singularity
-      uses: eWaterCycle/setup-singularity@v5
-      with:
-        singularity-version: 3.6.1
 
     - name: Set up Python
       uses: actions/setup-python@v2
@@ -50,18 +60,22 @@ jobs:
       with:
         r-version: ${{ matrix.config.r }}
 
+    - name: Check Ubuntu version
+      run: |
+        echo "UBUNTU_VERSION=`grep DISTRIB_RELEASE /etc/lsb-release | sed 's/.*=//g'`" >> $GITHUB_ENV
+
     - name: Cache Python packages
       uses: actions/cache@v2
       with:
         path: ${{ env.pythonLocation }}
-        key: ${{runner.os}}-pip-${{ env.pythonLocation }}-${{ hashFiles('setup.py') }}
-        restore-keys: ${{runner.os}}-pip-${{ env.pythonLocation }}-
+        key: ${{env.UBUNTU_VERSION}}-pip-${{ env.pythonLocation }}-${{ hashFiles('setup.py') }}
+        restore-keys: ${{env.UBUNTU_VERSION}}-pip-${{ env.pythonLocation }}-
 
     - name: Install package & dependencies
       run: |
-        python -m pip install --upgrade "pip<=21.0"
-        pip install --use-deprecated=legacy-resolver -U wheel setuptools
-        pip install --use-deprecated=legacy-resolver -U .[test,r]
+        python -m pip install --upgrade pip
+        pip install -U wheel setuptools codecov
+        pip install -U --editable .[test,r,evaluate]
         python -c "import openproblems"
 
     - name: Cache R packages
@@ -69,36 +83,35 @@ jobs:
       if: startsWith(runner.os, 'Linux')
       with:
         path: ${{ env.RENV_PATHS_ROOT }}
-        key: ${{ runner.os }}-renv-${{ steps.setup-r.outputs.installed-r-version }}-${{ hashFiles('**/renv.lock') }}
+        key: ${{ env.UBUNTU_VERSION }}-renv-${{ steps.setup-r.outputs.installed-r-version }}-${{ hashFiles('**/renv.lock') }}
         restore-keys: |
-          ${{ runner.os }}-renv-${{ steps.setup-r.outputs.installed-r-version }}-
+          ${{ env.UBUNTU_VERSION }}-renv-${{ steps.setup-r.outputs.installed-r-version }}-
 
     - name: Install R packages
       run: |
         if (!requireNamespace("renv", quietly = TRUE)) install.packages("renv")
         renv::restore()
-        renv::install("bioc::scran")
+        renv::install(scan("docker/openproblems-r-base/r_requirements.txt", what=character(), sep="\n"))
       shell: Rscript {0}
 
-    - name: Cache Singularity images
-      uses: actions/cache@v2
-      with:
-        path: ~/.singularity
-        key: ${{runner.os}}-singularity-${{ env.pythonLocation }}-${{ hashFiles('**/.docker_push') }}
+    - name: Build Docker images
+      run: |
+        cd workflow
+        snakemake -j 4 docker
+        cd ..
 
     - name: Run tests
-      run: nose2 -vvv
+      run: pytest --cov=openproblems --cov-report=term-missing:skip-covered --cov-report=xml -vv
 
     - name: Upload coverage
+      if: success() && ${{ github.repository == 'SingleCellOpenProblems/singlecellopenproblems' }}
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      run: |
-        coverage combine -a .
-        coveralls
+        CODECOV_NAME: ${{ runner.os }}-${{ matrix.name }}
+      run: codecov --no-color --required --flags unittests
 
     - name: Upload check results on fail
       if: failure()
       uses: actions/upload-artifact@master
       with:
         name: ${{ matrix.config.name }}_results
-        path: check
+        path: results

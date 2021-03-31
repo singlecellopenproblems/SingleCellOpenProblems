@@ -1,5 +1,8 @@
 from ... import utils
-from . import datasets, methods, metrics, checks
+from . import api
+from . import datasets
+from . import methods
+from . import metrics
 
 _task_name = "Multimodal Data Integration"
 
