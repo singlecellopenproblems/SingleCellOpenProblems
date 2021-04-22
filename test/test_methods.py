@@ -25,6 +25,7 @@ utils.warnings.ignore_warnings()
 def test_method(task_name, method_name, tempdir, image):
     """Test application of a method."""
     import anndata
+    import inspect
 
     task = getattr(openproblems.tasks, task_name)
     method = getattr(task.methods, method_name)
@@ -32,7 +33,12 @@ def test_method(task_name, method_name, tempdir, image):
     openproblems.log.debug(
         "Testing {} method from {} task".format(method.__name__, task.__name__)
     )
-    adata = method(adata)
+    # use test mode of method for speed increase
+    method_ = method
+    if hasattr(method, "__wrapped__"):
+        method_ = method.__wrapped__
+    kwargs = {"test": True} if "test" in inspect.signature(method_).parameters else {}
+    adata = method(adata, **kwargs)
     assert isinstance(adata, anndata.AnnData)
     assert task.api.check_method(adata)
 
